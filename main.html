@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AI Public Health Chatbot (Multilingual + 50 Diseases)</title>
+  <style>
+    :root{--bg:#15a97a;--card:#ffffff;--accent:#0b6cf6;--muted:#6b7280}
+    *{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0;padding:0}
+    body{background:var(--bg);padding:24px;}
+    .app{max-width:980px;margin:0 auto;display:grid;grid-template-columns:1fr 360px;gap:20px}
+    header{grid-column:1/-1;margin-bottom:8px}
+    .card{background:var(--card);border-radius:12px;padding:16px;box-shadow:0 6px 18px rgba(15,23,42,0.06)}
+    .chat{display:flex;flex-direction:column;height:620px}
+    .messages{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+    .bubble{max-width:72%;padding:10px 12px;border-radius:12px;font-size:14px;line-height:1.4}
+    .user{align-self:flex-end;background:#e6f0ff;color:#002244;border-bottom-right-radius:4px}
+    .bot{align-self:flex-start;background:#f1f5f9;color:#0b2133}
+    .controls{display:flex;gap:8px;padding-top:8px}
+    .input{flex:1;padding:10px;border:1px solid #e6eef8;border-radius:8px}
+    button{background:var(--accent);color:white;padding:10px 12px;border:none;border-radius:8px;cursor:pointer}
+    button.secondary{background:#eef2ff;color:var(--accent);border:1px solid rgba(11,108,246,0.12)}
+    select{padding:6px;border-radius:6px;border:1px solid #ccc;}
+    .sidebar{display:flex;flex-direction:column;gap:12px}
+    .section-title{font-weight:600;margin-bottom:8px;color:#0b2540}
+    .small{font-size:13px;color:var(--muted)}
+    .list{display:flex;flex-direction:column;gap:8px}
+    .center-card{padding:10px;border-radius:8px;border:1px solid #eef4ff;background:linear-gradient(180deg,#ffffff,#fbfdff)}
+    .row{display:flex;gap:8px;align-items:center}
+    footer{grid-column:1/-1;text-align:center;margin-top:12px;color:var(--muted);font-size:13px}
+    @media (max-width:980px){.app{grid-template-columns:1fr;}.sidebar{order:2}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="card">
+      <h1 style="font-size:20px">🌐 AI Public Health Chatbot</h1>
+      <p class="small">Voice • Symptoms • Vaccination centers</p>
+      <div style="margin-top:8px">
+        🌏 <label for="langSel">Language:</label>
+        <select id="langSel">
+          <option value="en">English</option>
+          <option value="hi">हिन्दी (Hindi)</option>
+          <option value="or">ଓଡ଼ିଆ (Odia)</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <main class="app">
+    <section class="card chat" aria-label="Chat area">
+      <div class="messages" id="messages" aria-live="polite"></div>
+
+      <div class="controls">
+        <input id="userInput" class="input" placeholder="Type here..." />
+        <button id="sendBtn">Send</button>
+        <button id="micBtn" class="secondary" title="Voice input">🎙</button>
+        <button id="speakBtn" class="secondary" title="Read reply">🔊</button>
+      </div>
+    </section>
+
+    <aside class="sidebar">
+      <div class="card">
+        <div class="section-title">Vaccination Centers</div>
+        <div class="row" style="margin-bottom:8px">
+          <input id="cityInput" class="input" placeholder="Enter city..." />
+          <button id="searchCenters">Search</button>
+        </div>
+        <div id="centersList" class="list small"></div>
+      </div>
+    </aside>
+
+    <footer>
+      Prototype — not for clinical use.
+    </footer>
+  </main>
+
+  <script>
+    // --- Translations ---
+    const translations = {
+      en: {
+        welcome: "Welcome! Ask about symptoms or vaccination centers.",
+        noMatch: "I couldn't match those symptoms. Please provide more details.",
+        sideEffects: "Common vaccine side effects: mild fever, soreness, fatigue.",
+        hello: "Hello! I can help with symptoms, vaccine info, and centers.",
+        found: "Possible match:"
+      },
+      hi: {
+        welcome: "स्वागत है! लक्षण या टीकाकरण केंद्रों के बारे में पूछें।",
+        noMatch: "मैं इन लक्षणों से कोई रोग नहीं पहचान पाया। कृपया और विवरण दें।",
+        sideEffects: "सामान्य दुष्प्रभाव: हल्का बुखार, इंजेक्शन स्थल पर दर्द, थकान।",
+        hello: "नमस्ते! मैं लक्षण, वैक्सीन जानकारी और केंद्रों की मदद कर सकता हूँ।",
+        found: "संभावित रोग:"
+      },
+      or: {
+        welcome: "ସ୍ୱାଗତ! ଲକ୍ଷଣ କିମ୍ବା ଟିକାକରଣ କେନ୍ଦ୍ର ବିଷୟରେ ପଚାରନ୍ତୁ।",
+        noMatch: "ମୁଁ ଏହି ଲକ୍ଷଣରୁ କୌଣସି ରୋଗ ପହିଚାରିପାରିଲି ନାହିଁ। ଦୟାକରି ଅଧିକ ବିବରଣୀ ଦିଅ।",
+        sideEffects: "ସାଧାରଣ ପ୍ରତିକ୍ରିୟା: ସାନା ଜ୍ୱର, ବେଦନା, କ୍ଲାନ୍ତି।",
+        hello: "ନମସ୍କାର! ମୁଁ ଲକ୍ଷଣ, ଟିକା ସୂଚନା ଓ କେନ୍ଦ୍ର ସହାୟତା କରିପାରେ।",
+        found: "ସମ୍ଭାବ୍ୟ ରୋଗ:"
+      }
+    };
+
+    let currentLang = "en";
+
+    // --- Disease Database with Prevention ---
+    const diseaseDB = [
+      {
+        name:{en:"Common Cold",hi:"साधारण जुकाम",or:"ସାଧାରଣ ସର୍ଦି"},
+        symptoms:["sneezing","runny nose","congestion","sore throat"],
+        desc:{
+          en:"A viral infection causing sneezing, sore throat, and congestion.",
+          hi:"यह एक वायरल संक्रमण है जिसमें छींक, गले में खराश और जकड़न होती है।",
+          or:"ଏହା ଏକ ଭାଇରାଲ ସଂକ୍ରମଣ, ଯାହା ସହିତ ସର୍ଦି, ଗଳା ଯନ୍ତ୍ରଣା ଓ ଜମାଟାଣା ହୁଏ।"
+        },
+        prevention:{
+          en:"Wash hands frequently, avoid close contact with sick people, stay hydrated.",
+          hi:"हाथ बार-बार धोएं, बीमार लोगों से दूरी बनाएँ, पर्याप्त पानी पिएं।",
+          or:"ହାତ ସାଧାରଣତଃ ଧୋଆନ୍ତୁ, ଅସୁସ୍ଥ ବ୍ୟକ୍ତିଙ୍କୁ ଏଡ଼ାନ୍ତୁ, ପାଣି ପିଆନ୍ତୁ।"
+        }
+      },
+      {
+        name:{en:"Influenza (Flu)",hi:"इन्फ्लूएंजा (फ्लू)",or:"ଇନ୍‌ଫ୍ଲୁଏଞ୍ଜା (ଫ୍ଲୁ)"},
+        symptoms:["fever","chills","body ache","cough","fatigue"],
+        desc:{
+          en:"A contagious viral infection with fever, chills, and body aches.",
+          hi:"यह एक संक्रामक वायरल संक्रमण है जिसमें बुखार, ठंड लगना और शरीर में दर्द होता है।",
+          or:"ଏହା ଏକ ସଂକ୍ରାମକ ଭାଇରାଲ ସଂକ୍ରମଣ, ଯାହାରେ ଜ୍ୱର, କାମ୍ପନ ଓ ଶରୀରେ ବେଦନା ହୁଏ।"
+        },
+        prevention:{
+          en:"Get vaccinated annually, wash hands, avoid crowded places.",
+          hi:"हर साल टीकाकरण करवाएँ, हाथ धोएं, भीड़ से बचें।",
+          or:"ପ୍ରତିବର୍ଷ ଟିକାକରଣ କରନ୍ତୁ, ହାତ ଧୋଆନ୍ତୁ, ଭିଡ଼କୁ ଏଡ଼ାନ୍ତୁ।"
+        }
+      },
+      {
+        name:{en:"Malaria",hi:"मलेरिया",or:"ମାଲେରିଆ"},
+        symptoms:["fever","chills","sweating","headache"],
+        desc:{
+          en:"A mosquito-borne disease causing fever and chills.",
+          hi:"यह मच्छरों से फैलने वाला रोग है जिसमें बुखार और ठंड लगती है।",
+          or:"ଏହା ମାଛିରେ ପ୍ରସାରିତ ରୋଗ, ଯାହାରେ ଜ୍ୱର ଓ କାମ୍ପନ ହୁଏ।"
+        },
+        prevention:{
+          en:"Use mosquito nets, apply repellents, remove stagnant water.",
+          hi:"मच्छरदानी का उपयोग करें, रिपेलेंट लगाएँ, रुके हुए पानी को हटाएँ।",
+          or:"ମଶାରି ବ୍ୟବହାର କରନ୍ତୁ, ରିପେଲେଣ୍ଟ ଲଗାନ୍ତୁ, ରୁକିଥିବା ପାଣିକୁ ହଟାନ୍ତୁ।"
+        }
+      },
+      {
+        name:{en:"Dengue",hi:"डेंगू",or:"ଡେଙ୍ଗୁ"},
+        symptoms:["high fever","rash","joint pain","headache"],
+        desc:{
+          en:"A mosquito-borne viral disease with high fever, rash, and joint pain.",
+          hi:"यह मच्छरों से फैलने वाला वायरल रोग है जिसमें तेज बुखार, चकत्ते और जोड़ों में दर्द होता है।",
+          or:"ଏହା ମାଛିରେ ପ୍ରସାରିତ ଭାଇରାଲ ରୋଗ, ଯାହାରେ ଉଚ୍ଚ ଜ୍ୱର, ଚକତି ଓ ସନ୍ଧିବେଦନା ହୁଏ।"
+        },
+        prevention:{
+          en:"Prevent mosquito breeding, wear full sleeves, use nets and repellents.",
+          hi:"मच्छरों के प्रजनन को रोकें, पूरी बाजू के कपड़े पहनें, मच्छरदानी का प्रयोग करें।",
+          or:"ମଶା ପ୍ରଜନନ ରୋକନ୍ତୁ, ପୂର୍ଣ୍ଣବାହୁ ପୋଶାକ ପିନ୍ଧନ୍ତୁ, ମଶାରି ବ୍ୟବହାର କରନ୍ତୁ।"
+        }
+      },
+      {
+        name:{en:"Typhoid",hi:"टाइफाइड",or:"ଟାଇଫଏଡ୍"},
+        symptoms:["fever","weakness","abdominal pain","constipation","rash"],
+        desc:{
+          en:"A bacterial infection with fever, weakness, and stomach pain.",
+          hi:"यह एक बैक्टीरियल संक्रमण है जिसमें बुखार, कमजोरी और पेट दर्द होता है।",
+          or:"ଏହା ଏକ ବ୍ୟାକ୍ଟେରିଆଲ ସଂକ୍ରମଣ, ଯାହାରେ ଜ୍ୱର, ଦୁର୍ବଳତା ଓ ପେଟ ଯନ୍ତ୍ରଣା ହୁଏ।"
+        },
+        prevention:{
+          en:"Drink clean water, wash hands, eat hygienic food.",
+          hi:"स्वच्छ पानी पिएं, हाथ धोएं, स्वच्छ भोजन खाएँ।",
+          or:"ସଫା ପାଣି ପିଆନ୍ତୁ, ହାତ ଧୋଆନ୍ତୁ, ସ୍ୱଚ୍ଛ ଖାଦ୍ୟ ଖାଆନ୍ତୁ।"
+        }
+      }
+      // ⚠ Add remaining 45 diseases here in same format
+    ];
+
+    // --- Vaccination Centers ---
+    const vaccinationCenters = [
+      {city:"Pune", name:"City Health Center Pune", address:"123 MG Road"},
+      {city:"Mumbai", name:"Mumbai Central Clinic", address:"Marine Drive"},
+      {city:"Delhi", name:"AIIMS Delhi", address:"Ansari Nagar"},
+      {city:"Bhubaneswar", name:"Capital Hospital", address:"Unit 6"}
+    ];
+
+    // --- Chat ---
+    const messagesEl = document.getElementById("messages");
+    const userInput = document.getElementById("userInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const langSel = document.getElementById("langSel");
+    let lastBotReply="";
+
+    function appendMessage(txt, from="bot"){
+      const div=document.createElement("div");
+      div.className="bubble "+(from==="user"?"user":"bot");
+      div.textContent=txt;
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop=messagesEl.scrollHeight;
+      if(from==="bot") lastBotReply=txt;
+    }
+
+    function botReply(txt){
+      setTimeout(()=>appendMessage(txt,"bot"),300);
+    }
+
+    function findDiseaseBySymptoms(input){
+      const results=[];
+      diseaseDB.forEach(d=>{
+        if(d.symptoms.some(s=>input.includes(s))) results.push(d);
+      });
+      return results;
+    }
+
+    function handleUserText(txt){
+      appendMessage(txt,"user");
+      const t=txt.toLowerCase();
+
+      if(t.includes("hello")||t.includes("hi")) return botReply(translations[currentLang].hello);
+      if(t.includes("side effect")) return botReply(translations[currentLang].sideEffects);
+
+      // Vaccination search inside chat
+      const cityMatch=vaccinationCenters.find(c=>t.includes(c.city.toLowerCase()));
+      if(cityMatch) return botReply(${cityMatch.city}: ${cityMatch.name}, ${cityMatch.address});
+
+      // Disease check
+      const matches=findDiseaseBySymptoms(t);
+      if(matches.length){
+        let reply=translations[currentLang].found+"\n";
+        matches.forEach(m=>{
+          reply+=👉 ${m.name[currentLang]}\n;
+          reply+=`   📖 ${m.desc[currentLang]}\n`;
+          if(m.prevention) reply+=`   🛡 Prevention: ${m.prevention[currentLang]}\n\n`;
+        });
+        return botReply(reply);
+      }
+
+      return botReply(translations[currentLang].noMatch);
+    }
+
+    sendBtn.onclick=()=>{
+      const txt=userInput.value.trim();
+      if(!txt) return;
+      handleUserText(txt);
+      userInput.value="";
+    };
+
+    langSel.onchange=()=>{
+      currentLang=langSel.value;
+      appendMessage(translations[currentLang].welcome);
+      if(recognizer) recognizer.lang=(currentLang==="hi"?"hi-IN":currentLang==="or"?"or-IN":"en-IN");
+    };
+
+    // --- Vaccination Sidebar Search ---
+    document.getElementById("searchCenters").onclick=()=>{
+      const city=document.getElementById("cityInput").value.trim().toLowerCase();
+      const list=document.getElementById("centersList");
+      list.innerHTML="";
+      const found=vaccinationCenters.filter(c=>c.city.toLowerCase().includes(city));
+      if(!found.length){list.innerHTML="No centers found";return;}
+      found.forEach(c=>{
+        const div=document.createElement("div");
+        div.className="center-card";
+        div.textContent=${c.city}: ${c.name}, ${c.address};
+        list.appendChild(div);
+      });
+    };
+
+    // --- Voice input/output ---
+    let recognizer=null;
+    const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+    const synth=window.speechSynthesis;
+
+    if(SpeechRecognition){
+      recognizer=new SpeechRecognition();
+      recognizer.lang="en-IN";
+      recognizer.onresult=e=>{
+        const text=e.results[0][0].transcript;
+        userInput.value=text;
+        handleUserText(text);
+      };
+    }
+
+    document.getElementById("micBtn").onclick=()=>{
+      if(!recognizer) return alert("Speech recognition not supported");
+      recognizer.lang=(currentLang==="hi"?"hi-IN":currentLang==="or"?"or-IN":"en-IN");
+      recognizer.start();
+    };
+
+    document.getElementById("speakBtn").onclick=()=>{
+      if(!synth||!lastBotReply) return;
+      const ut=new SpeechSynthesisUtterance(lastBotReply);
+      ut.lang=(currentLang==="hi"?"hi-IN":currentLang==="or"?"or-IN":"en-IN");
+      synth.cancel(); synth.speak(ut);
+    };
+
+    // Welcome
+    appendMessage('Namaste! Main public health assistant hoon. Aap apna symptoms likh kar send karein — responses milenge.');
+
+      
+    </script>
+</body>
+</html>
